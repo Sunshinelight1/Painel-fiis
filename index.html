@@ -24,7 +24,6 @@
     <tr>
       <th>FII</th>
       <th>Cotas</th>
-      <th>Vender (-)</th>
       <th>Comprar (+)</th>
       <th>Div. Real Últ. Mês (R$)</th>
       <th>Prev. Mês Atual (R$)</th>
@@ -122,7 +121,11 @@ function addCotas(code, qty) {
   qty = Number(qty);
   if (!qty) return;
   const data = load();
-  data[code] = data[code] || { cotas
+  data[code] = data[code] || { cotas: 0, div: 0 };
+  data[code].cotas += qty;
+  localStorage.setItem('fiiData', JSON.stringify(data));
+  render();
+}
 
 function exportData() {
   const data = localStorage.getItem('fiiData');
