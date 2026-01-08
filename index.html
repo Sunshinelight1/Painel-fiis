@@ -9,7 +9,7 @@
     table { width:98%; margin:20px auto; border-collapse:collapse; background:#fff; }
     th, td { padding:8px; border-bottom:1px solid #ddd; text-align:center; font-size:14px; }
     th { background:#111827; color:#fff; }
-    input { width:70px; padding:4px; text-align:center; }
+    input, select { width:80px; padding:4px; text-align:center; }
     button { padding:8px 14px; cursor:pointer; margin:5px; }
     .good { color:green; font-weight:bold; }
     .total { font-weight:bold; background:#f1f5f9; }
@@ -17,134 +17,115 @@
 </head>
 <body><header>
   <h1>Painel Profissional da Carteira de FIIs</h1>
-  <p>Controle de cotas, compras, vendas, dividendos e projeções</p>
-</header><table>
+  <p>Controle mensal e anual de compras, cotas e dividendos</p>
+</header><div style="text-align:center; margin:15px;">
+  Mês:
+  <select id="month"></select>
+  Ano:
+  <select id="year"></select>
+  <button onclick="saveMonth()">💾 Salvar Mês</button>
+</div><table>
   <thead>
     <tr>
       <th>FII</th>
-      <th>Cotas</th>
-      <th>Comprar (+)</th>
-      <th>Vender (-)</th>
-      <th>Div. por cota (últ. mês)</th>
-      <th>Rend. Mês (R$)</th>
-      <th>Yield Mensal</th>
-      <th>Saúde</th>
+      <th>Cotas Totais</th>
+      <th>Compradas no Mês</th>
+      <th>Div. por cota</th>
+      <th>Rend. Mensal (R$)</th>
     </tr>
   </thead>
   <tbody id="table-body"></tbody>
   <tfoot>
     <tr class="total">
       <td>Total</td>
-      <td>-</td>
-      <td>-</td>
+      <td id="totalCotas">0</td>
       <td>-</td>
       <td>-</td>
       <td id="totalRend">R$ 0,00</td>
-      <td id="totalYield">0%</td>
-      <td>-</td>
     </tr>
   </tfoot>
-</table><div style="text-align:center; margin-bottom:20px;">
-  <button onclick="saveData()">💾 Salvar</button>
-  <button onclick="exportData()">📤 Exportar</button>
-  <button onclick="importData()">📥 Importar</button>
-</div><script>
-const fiis = [
-  { code: 'KNCA11', price: 100, health: 'Boa' },
-  { code: 'KNCS11', price: 100, health: 'Boa' },
-  { code: 'KNCR11', price: 100, health: 'Excelente' },
-  { code: 'HGLG11', price: 160, health: 'Excelente' },
-  { code: 'MXRF11', price: 10,  health: 'Boa' },
-  { code: 'XPML11', price: 100, health: 'Boa' },
-  { code: 'RBRR11', price: 100, health: 'Boa' }
-];
+</table><script>
+const fiis = ['KNCA11','KNCS11','KNCR11','HGLG11','MXRF11','XPML11','RBRR11'];
 
-function load() {
-  return JSON.parse(localStorage.getItem('fiiData')) || {};
+function initSelectors() {
+  const m = document.getElementById('month');
+  const y = document.getElementById('year');
+  const months = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+  months.forEach((mo,i)=>{
+    const o=document.createElement('option'); o.value=i; o.text=mo; m.appendChild(o);
+  });
+  const currentYear = new Date().getFullYear();
+  for(let i=currentYear-3;i<=currentYear+1;i++){
+    const o=document.createElement('option'); o.value=i; o.text=i; y.appendChild(o);
+  }
 }
 
-function saveData() {
-  const data = {};
-  document.querySelectorAll('tr[data-code]').forEach(row => {
-    const code = row.dataset.code;
-    data[code] = {
-      cotas: Number(row.querySelector('.cotas').value),
-      div: Number(row.querySelector('.div').value)
-    };
+function loadData() {
+  return JSON.parse(localStorage.getItem('monthlyData')) || {};
+}
+
+function saveMonth() {
+  const data = loadData();
+  const key = `${year.value}-${month.value}`;
+  data[key] = data[key] || {};
+
+  document.querySelectorAll('tr[data-fii]').forEach(row=>{
+    const fii = row.dataset.fii;
+    const buy = Number(row.querySelector('.buy').value);
+    const div = Number(row.querySelector('.div').value);
+    data[key][fii] = { buy, div };
   });
-  localStorage.setItem('fiiData', JSON.stringify(data));
-  alert('Dados salvos com sucesso');
+
+  localStorage.setItem('monthlyData', JSON.stringify(data));
+  alert('Mês salvo com sucesso');
+}
+
+function calcTotalUntil(year, month) {
+  const data = loadData();
+  let totals = {};
+
+  Object.keys(data).forEach(k=>{
+    const [y,m] = k.split('-').map(Number);
+    if(y < year || (y === year && m <= month)){
+      Object.keys(data[k]).forEach(fii=>{
+        totals[fii] = (totals[fii] || 0) + data[k][fii].buy;
+      });
+    }
+  });
+  return totals;
 }
 
 function render() {
-  const saved = load();
   const tbody = document.getElementById('table-body');
   tbody.innerHTML = '';
 
-  let totalRend = 0;
-  let invested = 0;
+  const y = Number(year.value);
+  const m = Number(month.value);
+  const totals = calcTotalUntil(y,m);
+  let totalC=0, totalR=0;
 
-  fiis.forEach(f => {
-    const s = saved[f.code] || { cotas: 0, div: 0 };
-    const rend = s.cotas * s.div;
-    const yieldM = f.price ? (s.div / f.price * 100) : 0;
-
-    totalRend += rend;
-    invested += s.cotas * f.price;
-
+  fiis.forEach(fii=>{
+    const cotas = totals[fii] || 0;
     const tr = document.createElement('tr');
-    tr.dataset.code = f.code;
+    tr.dataset.fii = fii;
     tr.innerHTML = `
-      <td>${f.code}</td>
-      <td><input class="cotas" type="number" value="${s.cotas}" readonly></td>
-      <td><input type="number" min="0" onchange="addCotas('${f.code}', this.value)"></td>
-      <td><input type="number" min="0" onchange="sellCotas('${f.code}', this.value)"></td>
-      <td>R$ <input class="div" type="number" step="0.01" value="${s.div}" onchange="render()"></td>
-      <td>R$ ${rend.toFixed(2)}</td>
-      <td>${yieldM.toFixed(2)}%</td>
-      <td class="good">${f.health}</td>
+      <td>${fii}</td>
+      <td>${cotas}</td>
+      <td><input class="buy" type="number" min="0" value="0"></td>
+      <td><input class="div" type="number" step="0.01" value="0"></td>
+      <td>R$ ${(cotas * 0).toFixed(2)}</td>
     `;
     tbody.appendChild(tr);
+    totalC += cotas;
   });
 
-  const totalYield = invested ? (totalRend / invested * 100) : 0;
-
-  document.getElementById('totalRend').innerText = `R$ ${totalRend.toFixed(2)}`;
-  document.getElementById('totalYield').innerText = `${totalYield.toFixed(2)}%`;
+  document.getElementById('totalCotas').innerText = totalC;
+  document.getElementById('totalRend').innerText = `R$ ${totalR.toFixed(2)}`;
 }
 
-function addCotas(code, qty) {
-  qty = Number(qty);
-  if (!qty) return;
-  const data = load();
-  data[code] = data[code] || { cotas: 0, div: 0 };
-  data[code].cotas += qty;
-  localStorage.setItem('fiiData', JSON.stringify(data));
-  render();
-}
-
-function sellCotas(code, qty) {
-  qty = Number(qty);
-  if (!qty) return;
-  const data = load();
-  data[code] = data[code] || { cotas: 0, div: 0 };
-  data[code].cotas = Math.max(0, data[code].cotas - qty);
-  localStorage.setItem('fiiData', JSON.stringify(data));
-  render();
-}
-
-function exportData() {
-  const data = localStorage.getItem('fiiData');
-  prompt('Copie seus dados:', data);
-}
-
-function importData() {
-  const txt = prompt('Cole os dados exportados:');
-  if (!txt) return;
-  localStorage.setItem('fiiData', txt);
-  render();
-}
-
+initSelectors();
 render();
+month.onchange = render;
+year.onchange = render;
 </script></body>
 </html>
